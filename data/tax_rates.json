@@ -1,0 +1,32 @@
+{
+  "commercial": {
+    "rate": 0.02,
+    "description": "Commercial Tax",
+    "effective_date": "2024-01-01"
+  },
+  "income_individual": {
+    "rate": 0.05,
+    "description": "Individual Income Tax (Basic Rate)",
+    "effective_date": "2024-01-01"
+  },
+  "income_corporate": {
+    "rate": 0.25,
+    "description": "Corporate Income Tax",
+    "effective_date": "2024-01-01"
+  },
+  "customs": {
+    "rate": 0.05,
+    "description": "Customs Duty (Average)",
+    "effective_date": "2024-01-01"
+  },
+  "specific_goods": {
+    "rate": 0.05,
+    "description": "Specific Goods Tax",
+    "effective_date": "2024-01-01"
+  },
+  "property": {
+    "rate": 0.01,
+    "description": "Property Tax",
+    "effective_date": "2024-01-01"
+  }
+}

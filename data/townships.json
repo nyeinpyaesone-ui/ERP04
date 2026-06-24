@@ -1,0 +1,14 @@
+[
+  {"name": "Yangon", "state_region": "Yangon Region", "district": "Yangon", "postal_code": "11181"},
+  {"name": "Mandalay", "state_region": "Mandalay Region", "district": "Mandalay", "postal_code": "05021"},
+  {"name": "Naypyidaw", "state_region": "Naypyidaw Union Territory", "district": "Naypyidaw", "postal_code": "15011"},
+  {"name": "Pathein", "state_region": "Ayeyarwady Region", "district": "Pathein", "postal_code": "05041"},
+  {"name": "Mawlamyine", "state_region": "Mon State", "district": "Mawlamyine", "postal_code": "11111"},
+  {"name": "Taunggyi", "state_region": "Shan State", "district": "Taunggyi", "postal_code": "06001"},
+  {"name": "Myitkyina", "state_region": "Kachin State", "district": "Myitkyina", "postal_code": "01001"},
+  {"name": "Sittwe", "state_region": "Rakhine State", "district": "Sittwe", "postal_code": "07001"},
+  {"name": "Hpa-An", "state_region": "Kayin State", "district": "Hpa-An", "postal_code": "13001"},
+  {"name": "Loikaw", "state_region": "Kayah State", "district": "Loikaw", "postal_code": "12001"},
+  {"name": "Hakha", "state_region": "Chin State", "district": "Hakha", "postal_code": "04001"},
+  {"name": "Dawei", "state_region": "Tanintharyi Region", "district": "Dawei", "postal_code": "14001"}
+]
