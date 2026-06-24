@@ -1,0 +1,46 @@
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: ai-erp
+  namespace: ai-erp
+  labels:
+    app.kubernetes.io/name: ai-erp
+    app.kubernetes.io/part-of: ai-erp
+automountServiceAccountToken: true
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: Role
+metadata:
+  name: ai-erp
+  namespace: ai-erp
+  labels:
+    app.kubernetes.io/name: ai-erp
+    app.kubernetes.io/part-of: ai-erp
+rules:
+- apiGroups: [""]
+  resources: ["pods", "services", "endpoints", "configmaps", "secrets"]
+  verbs: ["get", "list", "watch"]
+- apiGroups: ["apps"]
+  resources: ["deployments", "statefulsets"]
+  verbs: ["get", "list", "watch"]
+- apiGroups: ["autoscaling"]
+  resources: ["horizontalpodautoscalers"]
+  verbs: ["get", "list", "watch"]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: ai-erp
+  namespace: ai-erp
+  labels:
+    app.kubernetes.io/name: ai-erp
+    app.kubernetes.io/part-of: ai-erp
+subjects:
+- kind: ServiceAccount
+  name: ai-erp
+  namespace: ai-erp
+roleRef:
+  kind: Role
+  name: ai-erp
+  apiGroup: rbac.authorization.k8s.io
+

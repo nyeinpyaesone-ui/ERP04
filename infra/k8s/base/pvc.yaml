@@ -1,0 +1,17 @@
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: ai-erp-uploads
+  namespace: ai-erp
+  labels:
+    app.kubernetes.io/name: ai-erp
+    app.kubernetes.io/component: storage
+    app.kubernetes.io/part-of: ai-erp
+spec:
+  accessModes:
+  - ReadWriteMany
+  storageClassName: efs-sc
+  resources:
+    requests:
+      storage: 50Gi
+
