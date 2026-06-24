@@ -1,0 +1,115 @@
+apiVersion: monitoring.coreos.com/v1
+kind: ServiceMonitor
+metadata:
+  name: ai-erp-metrics
+  namespace: ai-erp-monitoring
+  labels:
+    app.kubernetes.io/name: ai-erp-metrics
+    app.kubernetes.io/part-of: ai-erp
+    release: prometheus
+spec:
+  namespaceSelector:
+    matchNames:
+    - ai-erp
+  selector:
+    matchLabels:
+      app.kubernetes.io/part-of: ai-erp
+  endpoints:
+  - port: http
+    path: /metrics
+    interval: 30s
+    scrapeTimeout: 10s
+---
+apiVersion: monitoring.coreos.com/v1
+kind: PrometheusRule
+metadata:
+  name: ai-erp-alerts
+  namespace: ai-erp-monitoring
+  labels:
+    app.kubernetes.io/name: ai-erp-alerts
+    app.kubernetes.io/part-of: ai-erp
+    release: prometheus
+spec:
+  groups:
+  - name: ai-erp
+    rules:
+    - alert: AIERPApiHighErrorRate
+      expr: |
+        (
+          sum(rate(http_requests_total{job=~"ai-erp-api",status=~"5.."}[5m]))
+          /
+          sum(rate(http_requests_total{job=~"ai-erp-api"}[5m]))
+        ) > 0.05
+      for: 5m
+      labels:
+        severity: critical
+      annotations:
+        summary: "AI-ERP API High Error Rate"
+        description: "Error rate is above 5% for {{ $labels.namespace }}/{{ $labels.pod }}"
+
+    - alert: AIERPApiHighLatency
+      expr: |
+        histogram_quantile(0.95,
+          sum(rate(http_request_duration_seconds_bucket{job=~"ai-erp-api"}[5m])) by (le, namespace, pod)
+        ) > 2
+      for: 5m
+      labels:
+        severity: warning
+      annotations:
+        summary: "AI-ERP API High Latency"
+        description: "P95 latency is above 2s for {{ $labels.namespace }}/{{ $labels.pod }}"
+
+    - alert: AIERPApiPodRestart
+      expr: |
+        rate(kube_pod_container_status_restarts_total{namespace="ai-erp",container="api"}[15m]) > 0
+      for: 5m
+      labels:
+        severity: warning
+      annotations:
+        summary: "AI-ERP API Pod Restarting"
+        description: "Pod {{ $labels.pod }} is restarting frequently"
+
+    - alert: AIERPDBHighConnections
+      expr: |
+        pg_stat_activity_count{namespace="ai-erp"} > 150
+      for: 5m
+      labels:
+        severity: warning
+      annotations:
+        summary: "AI-ERP Database High Connections"
+        description: "Database connections are above 150"
+
+    - alert: AIERPDBReplicationLag
+      expr: |
+        pg_replication_lag{namespace="ai-erp"} > 300
+      for: 5m
+      labels:
+        severity: critical
+      annotations:
+        summary: "AI-ERP Database Replication Lag"
+        description: "Replication lag is above 5 minutes"
+
+    - alert: AIERPWorkerQueueDepth
+      expr: |
+        queue_depth{namespace="ai-erp"} > 1000
+      for: 5m
+      labels:
+        severity: warning
+      annotations:
+        summary: "AI-ERP Worker Queue Depth High"
+        description: "Worker queue depth is above 1000"
+
+    - alert: AIERPPVCUsage
+      expr: |
+        (
+          kubelet_volume_stats_used_bytes{namespace="ai-erp"}
+          /
+          kubelet_volume_stats_capacity_bytes{namespace="ai-erp"}
+        ) > 0.85
+      for: 5m
+      labels:
+        severity: warning
+      annotations:
+        summary: "AI-ERP PVC Usage High"
+        description: "PVC {{ $labels.persistentvolumeclaim }} is above 85%"
+
