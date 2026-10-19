@@ -1,11 +1,27 @@
 from sqlalchemy import (
     Column, Integer, String, Text, Boolean, DateTime, Date,
-    Numeric, ForeignKey, Index, Float, LargeBinary
+    Numeric, ForeignKey, Index, Float, LargeBinary, Table
 )
 from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy.orm import relationship
 from sqlalchemy.sql import func
 from app.database import Base
+
+
+# --- RBAC junction tables (schema defined in alembic revision 002) ---------
+
+user_roles = Table(
+    "user_roles", Base.metadata,
+    Column("user_id", Integer, ForeignKey("users.id", ondelete="CASCADE"), primary_key=True),
+    Column("role_id", Integer, ForeignKey("roles.id", ondelete="CASCADE"), primary_key=True),
+)
+
+role_permissions = Table(
+    "role_permissions", Base.metadata,
+    Column("role_id", Integer, ForeignKey("roles.id", ondelete="CASCADE"), primary_key=True),
+    Column("permission_id", Integer, ForeignKey("permissions.id", ondelete="CASCADE"), primary_key=True),
+)
+
 
 class User(Base):
     __tablename__ = "users"
@@ -21,6 +37,7 @@ class User(Base):
     created_at = Column(DateTime(timezone=True), server_default=func.now())
     updated_at = Column(DateTime(timezone=True), server_default=func.now(), onupdate=func.now())
 
+    roles = relationship("Role", secondary=user_roles, back_populates="users", lazy="selectin")
     contacts = relationship("Contact", back_populates="assigned_user", foreign_keys="Contact.assigned_to")
     deals = relationship("Deal", back_populates="assigned_user", foreign_keys="Deal.assigned_to")
     projects_managed = relationship("Project", back_populates="manager", foreign_keys="Project.manager_id")
@@ -451,4 +468,228 @@ class Setting(Base):
     description = Column(Text, nullable=True)
     created_at = Column(DateTime(timezone=True), server_default=func.now())
     updated_at = Column(DateTime(timezone=True), server_default=func.now(), onupdate=func.now())
+
+
+# ---------------------------------------------------------------------------
+# RBAC models (schema: alembic revision 002_add_rbac_permissions)
+# ---------------------------------------------------------------------------
+
+class Role(Base):
+    __tablename__ = "roles"
+
+    id = Column(Integer, primary_key=True, index=True)
+    name = Column(String(100), unique=True, nullable=False)
+    display_name = Column(String(255), nullable=False)
+    description = Column(Text, nullable=True)
+    is_system = Column(Boolean, nullable=False, server_default="false")
+    created_at = Column(DateTime(timezone=True), server_default=func.now())
+
+    users = relationship("User", secondary=user_roles, back_populates="roles")
+    permissions = relationship("Permission", secondary=role_permissions, back_populates="roles", lazy="selectin")
+    field_permissions = relationship("FieldPermission", back_populates="role", cascade="all, delete-orphan")
+
+
+class Permission(Base):
+    __tablename__ = "permissions"
+
+    id = Column(Integer, primary_key=True, index=True)
+    name = Column(String(100), unique=True, nullable=False)
+    resource = Column(String(100), nullable=False)
+    action = Column(String(50), nullable=False)
+    description = Column(Text, nullable=True)
+    created_at = Column(DateTime(timezone=True), server_default=func.now())
+
+    roles = relationship("Role", secondary=role_permissions, back_populates="permissions")
+
+
+class RolePermission(Base):
+    """ORM handle for the role_permissions junction table."""
+    __tablename__ = "role_permissions"
+
+    role_id = Column(Integer, ForeignKey("roles.id", ondelete="CASCADE"), primary_key=True)
+    permission_id = Column(Integer, ForeignKey("permissions.id", ondelete="CASCADE"), primary_key=True)
+
+
+class UserRole(Base):
+    """ORM handle for the user_roles junction table."""
+    __tablename__ = "user_roles"
+
+    user_id = Column(Integer, ForeignKey("users.id", ondelete="CASCADE"), primary_key=True)
+    role_id = Column(Integer, ForeignKey("roles.id", ondelete="CASCADE"), primary_key=True)
+
+
+class FieldPermission(Base):
+    __tablename__ = "field_permissions"
+
+    id = Column(Integer, primary_key=True, index=True)
+    role_id = Column(Integer, ForeignKey("roles.id", ondelete="CASCADE"), nullable=False)
+    resource = Column(String(100), nullable=False)
+    field_name = Column(String(100), nullable=False)
+    access_level = Column(String(20), nullable=False, server_default="read")  # hidden/read/write
+    created_at = Column(DateTime(timezone=True), server_default=func.now())
+
+    role = relationship("Role", back_populates="field_permissions")
+
+    __table_args__ = (
+        Index("uq_field_permission", "role_id", "resource", "field_name", unique=True),
+    )
+
+
+class DataPolicy(Base):
+    __tablename__ = "data_policies"
+
+    id = Column(Integer, primary_key=True, index=True)
+    name = Column(String(255), nullable=False)
+    resource = Column(String(100), nullable=False)
+    role_id = Column(Integer, ForeignKey("roles.id", ondelete="CASCADE"), nullable=False)
+    condition = Column(JSONB, nullable=True)
+    effect = Column(String(20), nullable=False, server_default="allow")  # allow/deny
+    priority = Column(Integer, nullable=False, server_default="100")
+    is_active = Column(Boolean, nullable=False, server_default="true")
+    created_at = Column(DateTime(timezone=True), server_default=func.now())
+
+    role = relationship("Role")
+
+
+# ---------------------------------------------------------------------------
+# LLM / AI models (schema: alembic revision 003_add_llm_integration)
+# ---------------------------------------------------------------------------
+
+class LLMModel(Base):
+    __tablename__ = "llm_models"
+
+    id = Column(Integer, primary_key=True, index=True)
+    name = Column(String(100), nullable=False)
+    provider = Column(String(50), nullable=False, server_default="ollama")
+    model_id = Column(String(100), unique=True, nullable=False)
+    display_name = Column(String(255), nullable=False)
+    description = Column(Text, nullable=True)
+    parameters = Column(JSONB, nullable=True)
+    is_active = Column(Boolean, nullable=False, server_default="true")
+    is_default = Column(Boolean, nullable=False, server_default="false")
+    supports_streaming = Column(Boolean, nullable=False, server_default="true")
+    supports_tools = Column(Boolean, nullable=False, server_default="false")
+    context_window = Column(Integer, nullable=True)
+    created_at = Column(DateTime(timezone=True), server_default=func.now())
+
+
+class AIConversation(Base):
+    __tablename__ = "ai_conversations"
+
+    id = Column(Integer, primary_key=True, index=True)
+    user_id = Column(Integer, ForeignKey("users.id", ondelete="CASCADE"), nullable=False)
+    title = Column(String(255), nullable=True)
+    model_id = Column(String(100), nullable=False)
+    system_prompt = Column(Text, nullable=True)
+    context = Column(JSONB, nullable=True)
+    is_archived = Column(Boolean, nullable=False, server_default="false")
+    created_at = Column(DateTime(timezone=True), server_default=func.now())
+    updated_at = Column(DateTime(timezone=True), server_default=func.now(), onupdate=func.now())
+
+    messages = relationship("AIMessage", back_populates="conversation", cascade="all, delete-orphan")
+    user = relationship("User")
+
+
+class AIMessage(Base):
+    __tablename__ = "ai_messages"
+
+    id = Column(Integer, primary_key=True, index=True)
+    conversation_id = Column(Integer, ForeignKey("ai_conversations.id", ondelete="CASCADE"), nullable=False)
+    role = Column(String(50), nullable=False)  # user / assistant / system
+    content = Column(Text, nullable=False)
+    model_id = Column(String(100), nullable=True)
+    tokens_used = Column(Integer, nullable=True)
+    latency_ms = Column(Integer, nullable=True)
+    tool_calls = Column(JSONB, nullable=True)
+    created_at = Column(DateTime(timezone=True), server_default=func.now())
+
+    conversation = relationship("AIConversation", back_populates="messages")
+
+
+class LLMUsage(Base):
+    __tablename__ = "llm_usage"
+
+    id = Column(Integer, primary_key=True, index=True)
+    user_id = Column(Integer, nullable=True)
+    model_id = Column(String(100), nullable=False)
+    conversation_id = Column(Integer, nullable=True)
+    prompt_tokens = Column(Integer, nullable=False, server_default="0")
+    completion_tokens = Column(Integer, nullable=False, server_default="0")
+    total_tokens = Column(Integer, nullable=False, server_default="0")
+    latency_ms = Column(Integer, nullable=True)
+    endpoint = Column(String(100), nullable=True)
+    success = Column(Boolean, nullable=False, server_default="true")
+    error_message = Column(Text, nullable=True)
+    created_at = Column(DateTime(timezone=True), server_default=func.now(), index=True)
+
+
+class AIPromptTemplate(Base):
+    __tablename__ = "ai_prompt_templates"
+
+    id = Column(Integer, primary_key=True, index=True)
+    name = Column(String(100), unique=True, nullable=False)
+    display_name = Column(String(255), nullable=False)
+    description = Column(Text, nullable=True)
+    system_prompt = Column(Text, nullable=False)
+    user_prompt_template = Column(Text, nullable=True)
+    variables = Column(JSONB, nullable=True)
+    model_id = Column(String(100), nullable=True)
+    category = Column(String(50), nullable=False, server_default="general")
+    is_active = Column(Boolean, nullable=False, server_default="true")
+    created_by = Column(Integer, ForeignKey("users.id", ondelete="SET NULL"), nullable=True)
+    created_at = Column(DateTime(timezone=True), server_default=func.now())
+
+    creator = relationship("User")
+
+
+# ---------------------------------------------------------------------------
+# Search models (schema: alembic revision 004_add_elasticsearch_search)
+# ---------------------------------------------------------------------------
+
+class SearchIndex(Base):
+    __tablename__ = "search_indexes"
+
+    id = Column(Integer, primary_key=True, index=True)
+    entity_type = Column(String(100), nullable=False, index=True)
+    entity_id = Column(Integer, nullable=False)
+    title = Column(String(500), nullable=True)
+    content = Column(Text, nullable=True)
+    searchable_text = Column(Text, nullable=False)
+    metadata = Column("metadata", JSONB, nullable=True)
+    tags = Column(JSONB, nullable=True)
+    created_at = Column(DateTime(timezone=True), server_default=func.now())
+    updated_at = Column(DateTime(timezone=True), server_default=func.now(), onupdate=func.now())
+
+    __table_args__ = (
+        Index("uq_search_index_entity", "entity_type", "entity_id", unique=True),
+    )
+
+
+class SearchQuery(Base):
+    __tablename__ = "search_queries"
+
+    id = Column(Integer, primary_key=True, index=True)
+    user_id = Column(Integer, nullable=True)
+    query = Column(Text, nullable=False)
+    filters = Column(JSONB, nullable=True)
+    results_count = Column(Integer, nullable=False, server_default="0")
+    execution_time_ms = Column(Integer, nullable=True)
+    clicked_results = Column(JSONB, nullable=True)
+    created_at = Column(DateTime(timezone=True), server_default=func.now(), index=True)
+
+
+class SearchSuggestion(Base):
+    __tablename__ = "search_suggestions"
+
+    id = Column(Integer, primary_key=True, index=True)
+    query_text = Column(String(255), nullable=False)
+    suggestion_type = Column(String(50), nullable=False, server_default="autocomplete")
+    entity_type = Column(String(100), nullable=True)
+    entity_id = Column(Integer, nullable=True)
+    frequency = Column(Integer, nullable=False, server_default="1")
+    last_used = Column(DateTime(timezone=True), server_default=func.now())
+
+    __table_args__ = (
+        Index("uq_search_suggestion", "query_text", "suggestion_type", "entity_type", unique=True),
+    )
 
